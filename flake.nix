@@ -20,6 +20,12 @@
           src = ./.;
 
           vendorHash = "";
+
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+
+          postFixup = ''
+            wrapProgram $out/bin/packer --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.imagemagick ]}
+          '';
         };
       in
       {
@@ -30,6 +36,7 @@
           buildInputs = with pkgs; [
             go
             gopls
+            imagemagick
           ];
         };
       }
