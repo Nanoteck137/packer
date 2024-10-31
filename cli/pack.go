@@ -59,17 +59,18 @@ func ReadMangaInfo(p string) (MangaInfo, error) {
 }
 
 var packOldManga = &cobra.Command{
-	Use: "old-manga",
+	Use: "old-manga <BASE> <OUTPUT>",
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		base := args[0]
+		out := args[1]
+
 		// NOTE(patrik):
 		//   <NAME>.swe
 		//     info.json
 		//     *PAGES*.jpg|png
 		//     cover.png 80x112
 
-		out := "./work"
-
-		base := "./testdata/Kagurabachi"
 		mangaInfo, err := ReadMangaInfo(path.Join(base, "manga.json"))
 		if err != nil {
 			log.Fatal(err)
@@ -91,7 +92,7 @@ var packOldManga = &cobra.Command{
 
 				fname := slug.Make(name)
 
-				f, err := os.OpenFile(path.Join(out, fname+".sw"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+				f, err := os.OpenFile(path.Join(out, fname+".sw"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -111,7 +112,11 @@ var packOldManga = &cobra.Command{
 					n := strconv.Itoa(i) + ext
 					pages = append(pages, n)
 
-					w, err := w.Create(n)
+					h := &zip.FileHeader{
+						Name: n,
+					}
+
+					w, err := w.CreateHeader(h)
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -153,7 +158,6 @@ var packOldManga = &cobra.Command{
 				if err != nil {
 					log.Fatal(err)
 				}
-
 
 				info := Info{
 					Name:           c.Name,
