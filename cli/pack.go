@@ -3,7 +3,6 @@ package cli
 import (
 	"archive/zip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -48,7 +47,12 @@ func ReadMangaInfo(p string) (MangaInfo, error) {
 	return res, nil
 }
 
-func createSeries(info MangaInfo, cover string, out string) error {
+type ExtraInfo struct {
+	MalId     string
+	AnilistId string
+}
+
+func createSeries(info MangaInfo, extra ExtraInfo, cover string, out string) error {
 	dname, err := os.MkdirTemp("", "packer-series")
 	if err != nil {
 		log.Fatal(err)
@@ -76,8 +80,8 @@ func createSeries(info MangaInfo, cover string, out string) error {
 	seriesInfo := metadata.SeriesInfo{
 		Name:      info.Title,
 		Type:      metadata.SeriesTypeManga,
-		MalId:     "",
-		AnilistId: "",
+		MalId:     extra.MalId,
+		AnilistId: extra.AnilistId,
 		Cover: metadata.SeriesInfoCover{
 			Original: path.Base(cover),
 			Small:    path.Base(small),
@@ -165,9 +169,6 @@ var packOldManga = &cobra.Command{
 		malId, _ := cmd.Flags().GetString("mal")
 		anilistId, _ := cmd.Flags().GetString("anilist")
 
-		fmt.Printf("malId: %v\n", malId)
-		fmt.Printf("anilistId: %v\n", anilistId)
-
 		err := os.MkdirAll(out, 0755)
 		if err != nil {
 			log.Fatal("Failed to create out dir", err)
@@ -184,7 +185,12 @@ var packOldManga = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		err = createSeries(mangaInfo, path.Join(base, "images", mangaInfo.Cover), out)
+		extra := ExtraInfo{
+			MalId:     malId,
+			AnilistId: anilistId,
+		}
+
+		err = createSeries(mangaInfo, extra, path.Join(base, "images", mangaInfo.Cover), out)
 		if err != nil {
 			log.Fatal(err)
 		}
