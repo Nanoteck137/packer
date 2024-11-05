@@ -19,7 +19,7 @@
           version = self.shortRev or "dirty";
           src = ./.;
 
-          vendorHash = "sha256-e1IgVo2mAFk5BG9L2MIOKCA+5F3tJuG/p97kVQ50pQY=";
+          vendorHash = "sha256-BJNahy9Gfxyc0/u0eCGMxo9jl2YVOrY/sJgQWENaji0=";
 
           nativeBuildInputs = [ pkgs.makeWrapper ];
 
