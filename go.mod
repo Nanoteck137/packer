@@ -1,6 +1,6 @@
 module github.com/nanoteck137/packer
 
-go 1.21.7
+go 1.21
 
 require (
 	github.com/gosimple/slug v1.14.0
