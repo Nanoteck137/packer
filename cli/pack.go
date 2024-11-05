@@ -12,24 +12,13 @@ import (
 	"strings"
 
 	"github.com/gosimple/slug"
-	"github.com/kr/pretty"
+	"github.com/nanoteck137/packer/metadata"
 	"github.com/nanoteck137/packer/utils"
 	"github.com/spf13/cobra"
 )
 
 var packCmd = &cobra.Command{
 	Use: "pack",
-}
-
-type Info struct {
-	Name   string `json:"name"`
-	Series string `json:"series"`
-
-	IsManga        bool `json:"isManga"`
-	PreferVertical bool `json:"preferVertical"`
-
-	Cover string   `json:"cover"`
-	Pages []string `json:"pages"`
 }
 
 type MangaInfoChapter struct {
@@ -40,6 +29,7 @@ type MangaInfoChapter struct {
 
 type MangaInfo struct {
 	Title    string             `json:"title"`
+	Cover    string             `json:"cover"`
 	Chapters []MangaInfoChapter `json:"chapters"`
 }
 
@@ -58,15 +48,133 @@ func ReadMangaInfo(p string) (MangaInfo, error) {
 	return res, nil
 }
 
+func createSeries(info MangaInfo, cover string, out string) error {
+	dname, err := os.MkdirTemp("", "packer-series")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(dname)
+
+	large := path.Join(dname, "cover-large.png")
+	err = utils.CreateResizedImage(cover, large, 360, 480)
+	if err != nil {
+		return err
+	}
+
+	medium := path.Join(dname, "cover-medium.png")
+	err = utils.CreateResizedImage(cover, medium, 270, 360)
+	if err != nil {
+		return err
+	}
+
+	small := path.Join(dname, "cover-small.png")
+	err = utils.CreateResizedImage(cover, small, 180, 240)
+	if err != nil {
+		return err
+	}
+
+	seriesInfo := metadata.SeriesInfo{
+		Name:      info.Title,
+		Type:      metadata.SeriesTypeManga,
+		MalId:     "",
+		AnilistId: "",
+		Cover: metadata.SeriesInfoCover{
+			Original: path.Base(cover),
+			Small:    path.Base(small),
+			Medium:   path.Base(medium),
+			Large:    path.Base(large),
+		},
+	}
+
+	name := slug.Make(info.Title)
+
+	f, err := os.OpenFile(path.Join(out, name+".sws"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	w := zip.NewWriter(f)
+	defer w.Close()
+
+	copyFileToZip := func(file string) error {
+		h := &zip.FileHeader{
+			Name: path.Base(file),
+		}
+
+		w, err := w.CreateHeader(h)
+		if err != nil {
+			return err
+		}
+
+		src, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+
+		_, err = io.Copy(w, src)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	err = copyFileToZip(large)
+	if err != nil {
+		return err
+	}
+
+	err = copyFileToZip(medium)
+	if err != nil {
+		return err
+	}
+
+	err = copyFileToZip(small)
+	if err != nil {
+		return err
+	}
+
+	h := &zip.FileHeader{
+		Name: "info.json",
+	}
+
+	iw, err := w.CreateHeader(h)
+	if err != nil {
+		return err
+	}
+
+	e := json.NewEncoder(iw)
+	e.SetIndent("", "  ")
+	err = e.Encode(seriesInfo)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 var packOldManga = &cobra.Command{
-	Use: "old-manga <BASE> <OUTPUT>",
+	Use:  "old-manga <BASE> <OUTPUT>",
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		base := args[0]
 		out := args[1]
 
+		malId, _ := cmd.Flags().GetString("mal")
+		anilistId, _ := cmd.Flags().GetString("anilist")
+
+		fmt.Printf("malId: %v\n", malId)
+		fmt.Printf("anilistId: %v\n", anilistId)
+
+		err := os.MkdirAll(out, 0755)
+		if err != nil {
+			log.Fatal("Failed to create out dir", err)
+		}
+
 		// NOTE(patrik):
-		//   <NAME>.swe
+		//   <NAME>.sw - Sewaddle Entry (chapters)
 		//     info.json
 		//     *PAGES*.jpg|png
 		//     cover.png 80x112
@@ -76,12 +184,14 @@ var packOldManga = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		pretty.Println(mangaInfo)
+		err = createSeries(mangaInfo, path.Join(base, "images", mangaInfo.Cover), out)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		for _, c := range mangaInfo.Chapters {
 			func() {
 				p := path.Join(base, "chapters", strconv.Itoa(c.Index))
-				fmt.Printf("p: %v\n", p)
 
 				name := strings.TrimSpace(c.Name)
 
@@ -104,8 +214,6 @@ var packOldManga = &cobra.Command{
 				var pages []string
 				for i, page := range c.Pages {
 					p := path.Join(p, page)
-
-					fmt.Printf("p: %v\n", p)
 
 					// TODO(patrik): Check ext for jpeg png
 					ext := path.Ext(p)
@@ -159,7 +267,7 @@ var packOldManga = &cobra.Command{
 					log.Fatal(err)
 				}
 
-				info := Info{
+				info := metadata.EntryInfo{
 					Name:           c.Name,
 					Series:         mangaInfo.Title,
 					IsManga:        true,
@@ -168,12 +276,17 @@ var packOldManga = &cobra.Command{
 					Pages:          pages,
 				}
 
-				iw, err := w.Create("info.json")
+				h := &zip.FileHeader{
+					Name: "info.json",
+				}
+
+				iw, err := w.CreateHeader(h)
 				if err != nil {
 					log.Fatal(err)
 				}
 
 				e := json.NewEncoder(iw)
+				e.SetIndent("", "  ")
 				err = e.Encode(info)
 				if err != nil {
 					log.Fatal(err)
@@ -185,6 +298,9 @@ var packOldManga = &cobra.Command{
 }
 
 func init() {
+	packOldManga.Flags().String("mal", "", "Set MyAnimeList ID")
+	packOldManga.Flags().String("anilist", "", "Set AniList ID")
+
 	packCmd.AddCommand(packOldManga)
 	rootCmd.AddCommand(packCmd)
 }
