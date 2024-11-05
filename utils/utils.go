@@ -15,8 +15,6 @@ func CreateResizedImage(src string, dest string, width, height int) error {
 		dest,
 	}
 
-	fmt.Printf("args: %v\n", args)
-
 	cmd := exec.Command("magick", args...)
 	err := cmd.Run()
 	if err != nil {
