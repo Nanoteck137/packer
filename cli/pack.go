@@ -170,6 +170,8 @@ var packCbz = &cobra.Command{
 		input := args[0]
 		out := args[1]
 
+		serie, _ := cmd.Flags().GetString("serie")
+
 		fmt.Printf("input: %v\n", input)
 		fmt.Printf("out: %v\n", out)
 
@@ -339,9 +341,17 @@ var packCbz = &cobra.Command{
 			log.Fatal(err)
 		}
 
+		if serie == "" && comicInfo.Series == "" {
+			log.Fatal("No serie name found")
+		}
+
+		if serie == "" {
+			serie = comicInfo.Series
+		}
+
 		info := metadata.EntryInfo{
 			Name:           name,
-			Series:         strings.TrimSpace(comicInfo.Series),
+			Series:         strings.TrimSpace(serie),
 			IsManga:        comicInfo.Manga != "",
 			PreferVertical: false,
 			Cover:          "cover.png",
@@ -512,6 +522,8 @@ var packOldManga = &cobra.Command{
 }
 
 func init() {
+	packCbz.Flags().String("serie", "", "Name of the serie (override ComicInfo.xml)")
+
 	packOldManga.Flags().String("mal", "", "Set MyAnimeList ID")
 	packOldManga.Flags().String("anilist", "", "Set AniList ID")
 
